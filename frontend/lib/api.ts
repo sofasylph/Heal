@@ -27,6 +27,21 @@ export interface ClauseRef {
   excerpt: string;
 }
 
+export interface ReasonerSuggestion {
+  verdict: "applies" | "does_not_apply" | "uncertain";
+  rationale: string;
+  evidence_quotes: string[];
+  missing_information: string[];
+  confidence: number;
+  model: string;
+  prompt_version: string;
+  input_sha256: string;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  cached_response: boolean;
+}
+
 export interface Finding {
   rule_id: string;
   rule_version: string;
@@ -38,6 +53,7 @@ export interface Finding {
   confidence: number;
   deterministic: boolean;
   evidence: Record<string, unknown>;
+  suggestion: ReasonerSuggestion | null;
 }
 
 export interface AnomalyFlag {
@@ -67,6 +83,7 @@ export interface Decision {
   anomalies: AnomalyFlag[];
   payable_lines: PayableLine[];
   summary: string;
+  ai_assisted: boolean;
   engine_version: string;
   policy_version: string;
   decided_at: string;

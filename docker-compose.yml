@@ -17,6 +17,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://claimtrace:claimtrace@db:5432/claimtrace
       CORS_ORIGINS: http://localhost:3000
+      CLAIMTRACE_LLM_PROVIDER: ${CLAIMTRACE_LLM_PROVIDER:-none}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8000:8000"]
     depends_on:
       db: { condition: service_healthy }

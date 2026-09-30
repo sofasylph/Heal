@@ -115,6 +115,34 @@ class FindingOutcome(StrEnum):
     REVIEW = "review"  # rule could not be resolved deterministically
 
 
+class ClauseVerdict(StrEnum):
+    APPLIES = "applies"
+    DOES_NOT_APPLY = "does_not_apply"
+    UNCERTAIN = "uncertain"
+
+
+class ReasonerSuggestion(BaseModel):
+    """An LLM's advisory reading of whether an ambiguous clause applies.
+
+    Recorded verbatim with model, prompt version and input hash so the suggestion is
+    reproducible and auditable. It never changes money; see decision/engine.py.
+    """
+
+    verdict: ClauseVerdict
+    rationale: str
+    evidence_quotes: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float
+    model: str
+    prompt_version: str
+    input_sha256: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    latency_ms: int = 0
+    cached_response: bool = False
+
+
 class Finding(BaseModel):
     rule_id: str
     rule_version: str
@@ -126,6 +154,7 @@ class Finding(BaseModel):
     confidence: float = 1.0
     deterministic: bool = True
     evidence: dict[str, object] = Field(default_factory=dict)
+    suggestion: ReasonerSuggestion | None = None  # only on REVIEW findings
 
 
 class Recommendation(StrEnum):
@@ -168,6 +197,7 @@ class Decision(BaseModel):
     anomalies: list[AnomalyFlag]
     payable_lines: list[PayableLine]
     summary: str
+    ai_assisted: bool = False  # recommendation relies on an LLM clause suggestion
     engine_version: str
     policy_version: str
     decided_at: datetime

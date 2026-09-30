@@ -31,7 +31,8 @@ class Scenario(StrEnum):
     SPECIFIC_WAITING = "specific_waiting"
     INITIAL_WAITING = "initial_waiting"
     COSMETIC_EXCLUDED = "cosmetic_excluded"
-    AMBIGUOUS_EXCLUSION = "ambiguous_exclusion"
+    AMBIGUOUS_EXCLUSION = "ambiguous_exclusion"  # related term, truly excluded
+    AMBIGUOUS_COVERED = "ambiguous_covered"  # related term, but a clause exception covers it
     MISSING_DOCUMENT = "missing_document"
     CONFLICTING_DATES = "conflicting_dates"
     DUPLICATE_LINE = "duplicate_line"
@@ -47,6 +48,7 @@ SCENARIO_WEIGHTS = {
     Scenario.INITIAL_WAITING: 0.05,
     Scenario.COSMETIC_EXCLUDED: 0.05,
     Scenario.AMBIGUOUS_EXCLUSION: 0.06,
+    Scenario.AMBIGUOUS_COVERED: 0.05,
     Scenario.MISSING_DOCUMENT: 0.06,
     Scenario.CONFLICTING_DATES: 0.06,
     Scenario.DUPLICATE_LINE: 0.07,
@@ -143,6 +145,14 @@ AMBIGUOUS = {
     "procedure": "Aesthetic nasal reshaping",
     "base": 150000,
     "los": 2,
+    "surgical": True,
+}
+BURN_RECONSTRUCTION = {
+    "key": "burn_reconstruction",
+    "diagnosis": "Post-burn contracture of neck following thermal burn injury",
+    "procedure": "Scar revision and split-thickness skin grafting",
+    "base": 130000,
+    "los": 4,
     "surgical": True,
 }
 
@@ -449,6 +459,11 @@ def generate_claim(
         case = AMBIGUOUS
         truth_rec = Recommendation.NOT_PAYABLE
         requires_human = True
+    elif scenario is Scenario.AMBIGUOUS_COVERED:
+        # Clause 6.1 excludes cosmetic surgery "unless for reconstruction following an
+        # accident, burn or cancer": payable, but only a reader of the exception knows.
+        case = BURN_RECONSTRUCTION
+        requires_human = True
     elif scenario is Scenario.MISSING_DOCUMENT:
         truth_rec = Recommendation.NEEDS_INFO
     elif scenario is Scenario.CONFLICTING_DATES:
@@ -521,7 +536,7 @@ def generate_dataset(n: int = 200, seed: int = 7) -> list[SyntheticClaim]:
     for i in range(1, n + 1):
         scenario = rng.choices(scenarios, weights)[0]
         policy = rng.choice(policies)
-        if scenario is Scenario.AMBIGUOUS_EXCLUSION:
+        if scenario in (Scenario.AMBIGUOUS_EXCLUSION, Scenario.AMBIGUOUS_COVERED):
             # Only policies whose exclusions list the related terms make this ambiguous.
             policy = next(p for p in policies if p.policy_id == "SURAKSHA-SILVER")
         out.append(generate_claim(rng, i, scenario, policy))

@@ -1,4 +1,4 @@
-.PHONY: setup check-python api web test lint eval up down
+.PHONY: setup check-python api api-llm web test lint eval eval-llm up down
 
 PYTHON ?= python3
 
@@ -13,6 +13,10 @@ setup: check-python
 api:
 	cd backend && .venv/bin/uvicorn claimtrace.api.app:app --reload --port 8000
 
+api-llm:
+	cd backend && CLAIMTRACE_LLM_PROVIDER=claude CLAIMTRACE_LLM_CACHE=./llm_cache.jsonl \
+		.venv/bin/uvicorn claimtrace.api.app:app --reload --port 8000
+
 web:
 	cd frontend && npm run dev
 
@@ -25,6 +29,11 @@ lint:
 
 eval:
 	cd backend && .venv/bin/python -m claimtrace.evaluation.run --n 200 --seed 7 --out ../docs/eval
+
+# Needs Anthropic credentials on first run; cached responses replay afterwards.
+eval-llm:
+	cd backend && .venv/bin/python -m claimtrace.evaluation.run --n 200 --seed 7 \
+		--reasoner claude --cache ../docs/eval/llm_cache.jsonl --out ../docs/eval/llm
 
 up:
 	docker compose up --build

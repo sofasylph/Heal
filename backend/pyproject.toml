@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claimtrace"
-version = "0.1.0"
+version = "0.2.0"
 description = "Evidence-backed decision support for health insurance claims review"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pyyaml>=6.0",
     "python-dateutil>=2.9",
+    "anthropic>=1.9",
 ]
 
 [project.optional-dependencies]

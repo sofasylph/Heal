@@ -1,5 +1,20 @@
 {
   "n_claims": 200,
+  "reasoner": {
+    "reasoner": "none",
+    "models": [],
+    "eligible_findings": 18,
+    "suggestions": 0,
+    "suggestion_accuracy_pct": null,
+    "uncertain_pct": null,
+    "ai_assisted_claims": 0,
+    "replayed_from_cache": 0,
+    "input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 0,
+    "mean_latency_ms": 0,
+    "estimated_cost_usd": null
+  },
   "extraction_field_accuracy": {
     "patient_name": 100.0,
     "patient_age": 100.0,
@@ -10,58 +25,63 @@
     "procedure": 100.0,
     "claimed_amount": 100.0
   },
-  "decision_agreement_pct": 93.5,
-  "false_approval_pct": 6.5,
+  "decision_agreement_pct": 95.0,
+  "false_approval_pct": 5.0,
   "false_rejection_pct": 0.0,
   "unsafe_straight_through_pct": 0.0,
-  "straight_through_pct": 53.0,
-  "human_review_pct": 47.0,
+  "straight_through_pct": 51.0,
+  "human_review_pct": 49.0,
   "escalation_recall_pct": 100.0,
-  "payable_exact_match_pct": 91.6,
-  "payable_mae_inr": 714.63,
+  "payable_exact_match_pct": 91.7,
+  "payable_mae_inr": 1063.64,
   "citation_coverage_pct": 100.0,
   "anomaly_recall_pct": 100.0,
-  "anomaly_precision_pct": 80.0,
+  "anomaly_precision_pct": 73.3,
   "by_scenario": {
-    "ambiguous_exclusion": {
-      "n": 13,
-      "agreement_pct": 0.0,
-      "straight_through_pct": 0.0
-    },
-    "clean": {
-      "n": 55,
-      "agreement_pct": 100.0,
-      "straight_through_pct": 100.0
-    },
-    "conflicting_dates": {
-      "n": 11,
-      "agreement_pct": 100.0,
-      "straight_through_pct": 0.0
-    },
-    "cosmetic_excluded": {
-      "n": 11,
-      "agreement_pct": 100.0,
-      "straight_through_pct": 0.0
-    },
-    "duplicate_line": {
-      "n": 12,
-      "agreement_pct": 100.0,
-      "straight_through_pct": 0.0
-    },
-    "initial_waiting": {
-      "n": 13,
-      "agreement_pct": 100.0,
-      "straight_through_pct": 0.0
-    },
-    "missing_document": {
+    "ambiguous_covered": {
       "n": 8,
       "agreement_pct": 100.0,
       "straight_through_pct": 0.0
     },
-    "ped_after_waiting": {
-      "n": 16,
+    "ambiguous_exclusion": {
+      "n": 10,
+      "agreement_pct": 0.0,
+      "straight_through_pct": 0.0
+    },
+    "clean": {
+      "n": 53,
       "agreement_pct": 100.0,
-      "straight_through_pct": 87.5
+      "straight_through_pct": 100.0
+    },
+    "conflicting_dates": {
+      "n": 9,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 0.0
+    },
+    "cosmetic_excluded": {
+      "n": 9,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 0.0
+    },
+    "duplicate_line": {
+      "n": 11,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 0.0
+    },
+    "initial_waiting": {
+      "n": 14,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 0.0
+    },
+    "missing_document": {
+      "n": 11,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 0.0
+    },
+    "ped_after_waiting": {
+      "n": 12,
+      "agreement_pct": 100.0,
+      "straight_through_pct": 91.7
     },
     "ped_within_waiting": {
       "n": 10,
@@ -69,12 +89,12 @@
       "straight_through_pct": 0.0
     },
     "room_rent_over_cap": {
-      "n": 21,
+      "n": 22,
       "agreement_pct": 100.0,
-      "straight_through_pct": 100.0
+      "straight_through_pct": 95.5
     },
     "senior_copay": {
-      "n": 16,
+      "n": 17,
       "agreement_pct": 100.0,
       "straight_through_pct": 100.0
     },
@@ -86,39 +106,41 @@
   },
   "disagreements": [
     {
-      "claim_id": "CLM-0008",
-      "policy_id": "SURAKSHA-SILVER",
-      "scenario": "ambiguous_exclusion",
-      "truth": "not_payable",
-      "pred": "pay",
-      "truth_payable": 0.0,
-      "pred_payable": 103040.0,
-      "route": "escalate",
-      "requires_human": true,
-      "should_flag": false,
-      "flagged": false,
-      "confidence": 0.5,
-      "cited": 0,
-      "citable": 0
-    },
-    {
-      "claim_id": "CLM-0034",
+      "claim_id": "CLM-0040",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
       "pred": "partial",
       "truth_payable": 0.0,
-      "pred_payable": 108890.0,
+      "pred_payable": 112403.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
+      "cited": 2,
+      "citable": 2
+    },
+    {
+      "claim_id": "CLM-0048",
+      "policy_id": "SURAKSHA-SILVER",
+      "scenario": "ambiguous_exclusion",
+      "truth": "not_payable",
+      "pred": "partial",
+      "truth_payable": 0.0,
+      "pred_payable": 125921.0,
+      "route": "escalate",
+      "requires_human": true,
+      "should_flag": false,
+      "flagged": false,
+      "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 1,
       "citable": 1
     },
     {
-      "claim_id": "CLM-0067",
+      "claim_id": "CLM-0066",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
@@ -130,11 +152,12 @@
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 1,
       "citable": 1
     },
     {
-      "claim_id": "CLM-0073",
+      "claim_id": "CLM-0072",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
@@ -146,75 +169,63 @@
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 1,
       "citable": 1
     },
     {
-      "claim_id": "CLM-0087",
+      "claim_id": "CLM-0075",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
       "pred": "partial",
       "truth_payable": 0.0,
-      "pred_payable": 109593.0,
+      "pred_payable": 131745.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 1,
       "citable": 1
     },
     {
-      "claim_id": "CLM-0123",
+      "claim_id": "CLM-0099",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
       "pred": "partial",
       "truth_payable": 0.0,
-      "pred_payable": 110659.0,
+      "pred_payable": 115637.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
-      "cited": 1,
-      "citable": 1
+      "ai_assisted": false,
+      "cited": 2,
+      "citable": 2
     },
     {
-      "claim_id": "CLM-0130",
+      "claim_id": "CLM-0104",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
-      "pred": "partial",
+      "pred": "pay",
       "truth_payable": 0.0,
-      "pred_payable": 129410.0,
+      "pred_payable": 128379.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
-      "cited": 1,
-      "citable": 1
+      "ai_assisted": false,
+      "cited": 0,
+      "citable": 0
     },
     {
-      "claim_id": "CLM-0134",
-      "policy_id": "SURAKSHA-SILVER",
-      "scenario": "ambiguous_exclusion",
-      "truth": "not_payable",
-      "pred": "partial",
-      "truth_payable": 0.0,
-      "pred_payable": 107767.0,
-      "route": "escalate",
-      "requires_human": true,
-      "should_flag": false,
-      "flagged": false,
-      "confidence": 0.5,
-      "cited": 1,
-      "citable": 1
-    },
-    {
-      "claim_id": "CLM-0140",
+      "claim_id": "CLM-0138",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
@@ -226,72 +237,43 @@
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 2,
       "citable": 2
     },
     {
-      "claim_id": "CLM-0157",
+      "claim_id": "CLM-0149",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
       "pred": "partial",
       "truth_payable": 0.0,
-      "pred_payable": 105577.0,
+      "pred_payable": 127855.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 1,
       "citable": 1
     },
     {
-      "claim_id": "CLM-0162",
+      "claim_id": "CLM-0192",
       "policy_id": "SURAKSHA-SILVER",
       "scenario": "ambiguous_exclusion",
       "truth": "not_payable",
       "pred": "partial",
       "truth_payable": 0.0,
-      "pred_payable": 103038.0,
+      "pred_payable": 123750.0,
       "route": "escalate",
       "requires_human": true,
       "should_flag": false,
       "flagged": false,
       "confidence": 0.5,
+      "ai_assisted": false,
       "cited": 2,
       "citable": 2
-    },
-    {
-      "claim_id": "CLM-0168",
-      "policy_id": "SURAKSHA-SILVER",
-      "scenario": "ambiguous_exclusion",
-      "truth": "not_payable",
-      "pred": "partial",
-      "truth_payable": 0.0,
-      "pred_payable": 109647.0,
-      "route": "escalate",
-      "requires_human": true,
-      "should_flag": false,
-      "flagged": false,
-      "confidence": 0.5,
-      "cited": 1,
-      "citable": 1
-    },
-    {
-      "claim_id": "CLM-0179",
-      "policy_id": "SURAKSHA-SILVER",
-      "scenario": "ambiguous_exclusion",
-      "truth": "not_payable",
-      "pred": "partial",
-      "truth_payable": 0.0,
-      "pred_payable": 117568.0,
-      "route": "escalate",
-      "requires_human": true,
-      "should_flag": false,
-      "flagged": false,
-      "confidence": 0.5,
-      "cited": 1,
-      "citable": 1
     }
   ]
 }
