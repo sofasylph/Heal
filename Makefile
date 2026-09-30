@@ -1,7 +1,13 @@
-.PHONY: setup api web test lint eval up down
+.PHONY: setup check-python api web test lint eval up down
 
-setup:
-	cd backend && python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+PYTHON ?= python3
+
+check-python:
+	@$(PYTHON) -c 'import sys; assert sys.version_info >= (3, 11), f"Python 3.11+ required, found {sys.version.split()[0]}. Use: make setup PYTHON=python3.11"' \
+		|| (echo "Install Python 3.11+ (Ubuntu: sudo apt install python3 python3-venv)"; exit 1)
+
+setup: check-python
+	cd backend && $(PYTHON) -m venv .venv && .venv/bin/pip install -e ".[dev]"
 	cd frontend && npm install
 
 api:
