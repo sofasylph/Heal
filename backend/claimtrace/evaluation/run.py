@@ -57,16 +57,24 @@ APPROVE = {Recommendation.PAY, Recommendation.PARTIAL}
 PRICING = {"claude-opus-5-5": {"input": 4.0, "cache_read": 0.20, "output": 20.0}}
 
 
-def evaluate(dataset: list[SyntheticClaim], reasoner: ClauseReasoner | None = None) -> dict:
+def evaluate(
+    dataset: list[SyntheticClaim],
+    reasoner: ClauseReasoner | None = None,
+    classifier=None,
+    detector=None,
+) -> dict:
+    """classifier / detector default to the v0.1 keyword classifier and rules detector."""
     reasoner = reasoner or NullReasoner()
     llm = Counter()
     field_hits: Counter = Counter()
     field_total: Counter = Counter()
     rows = []
     for sc in dataset:
-        docs = ingest_documents(sc.documents)
+        docs = ingest_documents(sc.documents, classifier=classifier)
         facts = extract(docs)
-        decision = decide(get_policy(sc.policy_id), facts, docs, reasoner=reasoner)
+        decision = decide(
+            get_policy(sc.policy_id), facts, docs, reasoner=reasoner, anomaly_detector=detector
+        )
         expected = (
             ClauseVerdict.APPLIES
             if sc.truth.recommendation is Recommendation.NOT_PAYABLE
@@ -179,6 +187,10 @@ def evaluate(dataset: list[SyntheticClaim], reasoner: ClauseReasoner | None = No
 
     return {
         "n_claims": n,
+        "components": {
+            "doc_classifier": getattr(classifier, "name", "keyword"),
+            "anomaly_detector": getattr(detector, "name", "rules"),
+        },
         "reasoner": reasoner_report,
         "extraction_field_accuracy": {f: pct(field_hits[f], field_total[f]) for f in FIELDS},
         "decision_agreement_pct": pct(len(agree), n),
@@ -218,6 +230,7 @@ def to_markdown(report: dict) -> str:
         "# ClaimTrace evaluation report",
         "",
         f"Synthetic claims: **{report['n_claims']}** (see `evaluation/synthetic.py`).",
+        f"Components: `{report['components']}`",
         "",
         "| Metric | Value |",
         "|---|---:|",
@@ -276,12 +289,22 @@ def main() -> None:
     ap.add_argument("--cache", type=Path, default=None, help="JSONL response cache")
     ap.add_argument("--model", default="claude-opus-5-5")
     ap.add_argument("--effort", default="high")
+    ap.add_argument("--classifier", default="tfidf_logreg", choices=["keyword", "tfidf_logreg"])
+    ap.add_argument("--detector", default="hybrid", choices=["rules", "isolation_forest", "hybrid"])
     args = ap.parse_args()
     reasoner: ClauseReasoner = NullReasoner()
     if args.reasoner == "claude":
         cache = ResponseCache(args.cache) if args.cache else None
         reasoner = ClaudeReasoner(model=args.model, effort=args.effort, cache=cache)
-    report = evaluate(generate_dataset(args.n, args.seed), reasoner)
+    from claimtrace.ml.anomaly import get_anomaly_detector
+    from claimtrace.ml.doc_classifier import get_doc_classifier
+
+    report = evaluate(
+        generate_dataset(args.n, args.seed),
+        reasoner,
+        classifier=get_doc_classifier(args.classifier),
+        detector=get_anomaly_detector(args.detector),
+    )
     md = to_markdown(report)
     print(md)
     if args.out:

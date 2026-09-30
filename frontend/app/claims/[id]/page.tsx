@@ -14,6 +14,7 @@ import {
   type Recommendation,
 } from "@/lib/api";
 import { inr, label, pct } from "@/lib/format";
+import { ROLES, can, useIdentity } from "@/lib/identity";
 
 const TABS = ["Decision", "Payable breakdown", "Extracted facts", "Anomalies", "Documents", "Audit trail"] as const;
 type Tab = (typeof TABS)[number];
@@ -335,7 +336,7 @@ const RECS: Recommendation[] = ["pay", "partial", "not_payable", "needs_info"];
 
 function ReviewerPanel({ claim, onSaved }: { claim: Claim; onSaved: () => void }) {
   const d = claim.decision;
-  const [reviewer, setReviewer] = useState("");
+  const { identity } = useIdentity();
   const [rec, setRec] = useState<Recommendation>(d?.recommendation ?? "pay");
   const [amount, setAmount] = useState<number>(d?.payable_amount ?? 0);
   const [reason, setReason] = useState("");
@@ -343,14 +344,35 @@ function ReviewerPanel({ claim, onSaved }: { claim: Claim; onSaved: () => void }
   const [err, setErr] = useState<string | null>(null);
 
   if (!d) return null;
+  const allowed = can.decide(identity.role, d.route);
+  const roleLabel = ROLES.find((r) => r.id === identity.role)?.label ?? identity.role;
+  const blocked =
+    identity.role === "auditor"
+      ? "Auditors are read-only."
+      : d.route === "escalate" && !allowed
+        ? "Escalated claims must be decided by a senior reviewer. Switch role in the header."
+        : null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setErr(null);
     try {
-      await api.override(claim.claim_id, { reviewer, recommendation: rec, payable_amount: amount, reason });
+      await api.override(claim.claim_id, { recommendation: rec, payable_amount: amount, reason });
       setReason("");
+      onSaved();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rerun() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await api.adjudicate(claim.claim_id);
       onSaved();
     } catch (e) {
       setErr(String(e));
@@ -367,36 +389,61 @@ function ReviewerPanel({ claim, onSaved }: { claim: Claim; onSaved: () => void }
           <div className="font-medium">
             Final: {label(claim.override.recommendation)} · {inr(claim.override.payable_amount)}
           </div>
-          <div className="mt-1 text-xs">“{claim.override.reason}” by {claim.override.reviewer}</div>
+          <div className="mt-1 text-xs">
+            “{claim.override.reason}” by {claim.override.reviewer} ({label(claim.override.role)})
+          </div>
         </div>
       )}
-      <form onSubmit={submit} className="space-y-3 text-sm">
-        <label className="block">
-          <span className="text-slate-600">Reviewer</span>
-          <input required value={reviewer} onChange={(e) => setReviewer(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5" placeholder="your name" />
-        </label>
-        <label className="block">
-          <span className="text-slate-600">Decision</span>
-          <select value={rec} onChange={(e) => setRec(e.target.value as Recommendation)} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5">
-            {RECS.map((r) => <option key={r} value={r}>{label(r)}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-slate-600">Payable amount (INR)</span>
-          <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 tabular-nums" />
-        </label>
-        <label className="block">
-          <span className="text-slate-600">Reason (recorded in audit trail)</span>
-          <textarea required minLength={3} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5" />
-        </label>
-        {err && <p className="text-xs text-rose-700">{err}</p>}
-        <button disabled={saving} className="w-full rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700 disabled:opacity-50">
-          {saving ? "Saving…" : "Record decision"}
-        </button>
-        <p className="text-xs text-slate-500">
-          The system recommends; a human decides. Agreeing or overriding both land in the hash-chained audit log.
-        </p>
-      </form>
+      {blocked ? (
+        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{blocked}</p>
+      ) : (
+        <form onSubmit={submit} className="space-y-3 text-sm">
+          <p className="text-xs text-slate-500">
+            Deciding as <span className="font-medium text-slate-700">{identity.user}</span> ({roleLabel})
+          </p>
+          <label className="block">
+            <span className="text-slate-600">Decision</span>
+            <select value={rec} onChange={(e) => setRec(e.target.value as Recommendation)} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5">
+              {RECS.map((r) => <option key={r} value={r}>{label(r)}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-slate-600">Payable amount (INR)</span>
+            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 tabular-nums" />
+          </label>
+          <label className="block">
+            <span className="text-slate-600">Reason (recorded in audit trail)</span>
+            <textarea required minLength={3} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5" />
+          </label>
+          <button disabled={saving} className="w-full rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+            {saving ? "Saving…" : "Record decision"}
+          </button>
+        </form>
+      )}
+      {err && <p className="text-xs text-rose-700">{err}</p>}
+      <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
+        <div className="mb-1 font-medium text-slate-600">Models used</div>
+        {Object.entries(d.models_used ?? {}).length ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            {Object.entries(d.models_used).map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt>{k.replace(/_/g, " ")}</dt>
+                <dd className="font-mono">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <span>Not recorded (decided before v0.3).</span>
+        )}
+        {can.submit(identity.role) && (
+          <button onClick={rerun} disabled={saving} className="mt-2 text-sky-700 hover:underline disabled:opacity-50">
+            Re-run with current model settings
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        The system recommends; a human decides. Every decision lands in the hash-chained audit log.
+      </p>
     </aside>
   );
 }

@@ -1,3 +1,5 @@
+import { getIdentity } from "@/lib/identity";
+
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type Recommendation = "pay" | "partial" | "not_payable" | "needs_info";
@@ -84,6 +86,7 @@ export interface Decision {
   payable_lines: PayableLine[];
   summary: string;
   ai_assisted: boolean;
+  models_used: Record<string, string>;
   engine_version: string;
   policy_version: string;
   decided_at: string;
@@ -107,6 +110,7 @@ export interface ClaimFacts {
 
 export interface Override {
   reviewer: string;
+  role: string;
   recommendation: Recommendation;
   payable_amount: number;
   reason: string;
@@ -140,15 +144,113 @@ export interface AuditTrail {
   events: AuditEvent[];
 }
 
+export interface RawDocument {
+  filename: string;
+  text: string;
+  doc_type?: string | null;
+}
+
+export interface ExtractedDocument {
+  filename: string;
+  text: string;
+  doc_type: string;
+  classification_confidence: number;
+  pages: number | null;
+  warning: string | null;
+}
+
+export interface PolicySummary {
+  policy_id: string;
+  version: string;
+  name: string;
+  insurer: string;
+  description: string;
+  sum_insured: number;
+}
+
+export interface SampleClaim {
+  scenario: string;
+  description: string;
+  policy_id: string;
+  documents: RawDocument[];
+  expected_recommendation: string;
+  expected_payable: number;
+}
+
+export interface ModelSettings {
+  reasoner_provider: "none" | "claude" | "ollama";
+  claude_model: string;
+  claude_effort: "low" | "medium" | "high";
+  ollama_model: string;
+  ollama_url: string;
+  doc_classifier: string;
+  anomaly_detector: string;
+}
+
+export interface CatalogOption {
+  id: string;
+  label: string;
+  description?: string;
+  available?: boolean;
+}
+
+export interface SettingsResponse {
+  version: number;
+  settings: ModelSettings;
+  updated_by: string;
+  updated_at: string;
+  active_models: Record<string, string>;
+  catalog: {
+    doc_classifier: CatalogOption[];
+    anomaly_detector: CatalogOption[];
+    reasoner_provider: CatalogOption[];
+    claude_model: CatalogOption[];
+    ollama_installed_models: string[];
+  };
+}
+
+export interface Analytics {
+  claims: number;
+  decided: number;
+  totals: { claimed: number; system_payable: number; final_payable: number; not_paid: number };
+  straight_through_pct: number | null;
+  ai_assisted_claims: number;
+  by_recommendation: Record<string, number>;
+  by_route: Record<string, number>;
+  by_confidence: Record<string, number>;
+  by_policy: Record<string, { claims: number; claimed: number; payable: number }>;
+  deductions_by_rule: Record<string, number>;
+  anomalies_by_code: Record<string, number>;
+  reviewer: {
+    finalised: number;
+    agreement_pct: number | null;
+    overridden: number;
+    disagreements_by_rule: Record<string, number>;
+  };
+  models_used: Record<string, Record<string, number>>;
+}
+
+function identityHeaders(): Record<string, string> {
+  const { user, role } = getIdentity();
+  return { "X-User": user, "X-Role": role };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...identityHeaders(), ...(init?.headers ?? {}) },
     cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body);
+      detail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(`${res.status}: ${detail}`);
   }
   return res.json() as Promise<T>;
 }
@@ -158,8 +260,27 @@ export const api = {
   claim: (id: string) => request<Claim>(`/claims/${id}`),
   audit: (id: string) => request<AuditTrail>(`/claims/${id}/audit`),
   adjudicate: (id: string) => request<Claim>(`/claims/${id}/adjudicate`, { method: "POST" }),
-  override: (
-    id: string,
-    body: { reviewer: string; recommendation: Recommendation; payable_amount: number; reason: string },
-  ) => request<Claim>(`/claims/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
+  override: (id: string, body: { recommendation: Recommendation; payable_amount: number; reason: string }) =>
+    request<Claim>(`/claims/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
+  policies: () => request<PolicySummary[]>("/policies"),
+  createClaim: (policy_id: string, documents: RawDocument[]) =>
+    request<Claim>("/claims", { method: "POST", body: JSON.stringify({ policy_id, documents }) }),
+  samples: () => request<{ scenario: string; description: string }[]>("/samples"),
+  sample: (scenario: string, policy_id: string) =>
+    request<SampleClaim>(`/samples/${scenario}?policy_id=${encodeURIComponent(policy_id)}`),
+  extract: async (files: File[]): Promise<ExtractedDocument[]> => {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f));
+    const res = await fetch(`${API_URL}/documents/extract`, {
+      method: "POST",
+      body: form,
+      headers: identityHeaders(),
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${(await res.json().catch(() => ({}))).detail ?? res.statusText}`);
+    return res.json();
+  },
+  settings: () => request<SettingsResponse>("/settings"),
+  saveSettings: (s: ModelSettings) =>
+    request<SettingsResponse>("/settings", { method: "PUT", body: JSON.stringify(s) }),
+  analytics: () => request<Analytics>("/analytics"),
 };

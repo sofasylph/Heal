@@ -49,6 +49,15 @@ class AuditEventRow(Base):
     hash: Mapped[str] = mapped_column(String(64))
 
 
+class SettingsVersionRow(Base):
+    __tablename__ = "settings_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    value: Mapped[dict] = mapped_column(JSON)
+    updated_by: Mapped[str] = mapped_column(String(100))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 def make_engine(url: str = DATABASE_URL):
     kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
     return create_engine(url, **kwargs)

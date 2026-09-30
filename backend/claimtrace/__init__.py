@@ -1,3 +1,3 @@
 """ClaimTrace: evidence-backed decision support for health insurance claims."""
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.3.0"

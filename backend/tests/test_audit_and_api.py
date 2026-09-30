@@ -28,11 +28,11 @@ def test_api_end_to_end():
         r = client.post(
             f"/claims/{cid}/override",
             json={
-                "reviewer": "tester",
                 "recommendation": "partial",
                 "payable_amount": 1000,
                 "reason": "Testing override",
             },
+            headers={"X-User": "tester", "X-Role": "senior_reviewer"},
         )
         assert r.status_code == 200 and r.json()["status"] == "finalised"
 

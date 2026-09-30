@@ -4,3 +4,8 @@ body {
   background: #f8fafc;
   color: #0f172a;
 }
+
+:root {
+  /* dataviz reference palette, categorical slot 1 (validated on the light surface) */
+  --series-1: #2a78d6;
+}

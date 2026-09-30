@@ -1,4 +1,4 @@
-.PHONY: setup check-python api api-llm web test lint eval eval-llm up down
+.PHONY: setup check-python api api-llm web test lint eval eval-llm compare up down
 
 PYTHON ?= python3
 
@@ -34,6 +34,11 @@ eval:
 eval-llm:
 	cd backend && .venv/bin/python -m claimtrace.evaluation.run --n 200 --seed 7 \
 		--reasoner claude --cache ../docs/eval/llm_cache.jsonl --out ../docs/eval/llm
+
+# Compare classifiers, anomaly detectors and clause reasoners (skips unavailable ones).
+compare:
+	cd backend && .venv/bin/python -m claimtrace.evaluation.compare --out ../docs/eval \
+		--cache ../docs/eval/llm_cache.jsonl
 
 up:
 	docker compose up --build

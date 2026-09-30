@@ -14,6 +14,7 @@ from claimtrace.decision.engine import decide
 from claimtrace.decision.reasoner import (
     PROMPT_VERSION,
     ClaudeReasoner,
+    OllamaReasoner,
     ResponseCache,
 )
 from claimtrace.domain.models import (
@@ -26,6 +27,7 @@ from claimtrace.domain.models import (
 from claimtrace.evaluation.run import evaluate
 from claimtrace.evaluation.synthetic import Scenario, generate_claim, generate_dataset
 from claimtrace.policies.registry import get_policy
+from claimtrace.settings.components import Components
 
 SILVER = get_policy("SURAKSHA-SILVER")
 
@@ -184,15 +186,30 @@ class AdversarialReasoner:
 
 
 def test_even_a_wrong_confident_model_cannot_cause_straight_through():
-    report = evaluate(generate_dataset(n=150, seed=5), AdversarialReasoner())
+    dataset = generate_dataset(n=150, seed=5)
+    baseline = evaluate(dataset)
+    report = evaluate(dataset, AdversarialReasoner())
     assert report["reasoner"]["suggestions"] > 0
     assert report["unsafe_straight_through_pct"] == 0.0
-    assert report["escalation_recall_pct"] == 100.0
+    # the model can move claims between human queues, never out of human review
+    assert report["escalation_recall_pct"] == baseline["escalation_recall_pct"]
+    assert report["straight_through_pct"] == baseline["straight_through_pct"]
 
 
 def test_llm_suggestion_is_written_to_audit_trail(monkeypatch):
     fake = ClaudeReasoner(client=FakeClient(answer("applies", 0.9)))
-    monkeypatch.setattr(service, "_reasoner", lambda: fake)
+    real = service._components
+
+    def with_fake(session):
+        c = real(session)
+        return Components(
+            c.classifier,
+            c.detector,
+            fake,
+            {**c.models_used, "clause_reasoner": "claude:claude-opus-5-5"},
+        )
+
+    monkeypatch.setattr(service, "_components", with_fake)
     sc = generate_claim(random.Random(4), 9100, Scenario.AMBIGUOUS_EXCLUSION, SILVER)
     with TestClient(app) as client:
         body = {"policy_id": sc.policy_id, "documents": [d.model_dump() for d in sc.documents]}
@@ -205,3 +222,61 @@ def test_llm_suggestion_is_written_to_audit_trail(monkeypatch):
     event = next(e for e in trail["events"] if e["action"] == "llm_suggested")
     assert event["actor"] == "llm:claude-opus-5-5"
     assert event["payload"]["suggestion"]["input_sha256"]
+
+
+class FakeHaikuClient(FakeClient):
+    """Haiku goes through client.messages.create (no beta features)."""
+
+    def __init__(self, answer_):
+        super().__init__(answer_)
+        self.messages = SimpleNamespace(create=self._create)
+        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._fail))
+
+    def _fail(self, **kwargs):
+        raise AssertionError("Haiku must not use the beta endpoint")
+
+
+def test_haiku_request_has_no_effort_or_fallbacks():
+    client = FakeHaikuClient(answer("applies", 0.9))
+    reasoner = ClaudeReasoner(client=client, model="claude-haiku-4-5")
+    d = decide(SILVER, ambiguous_facts(), docs(), reasoner=reasoner)
+    req = client.calls[0]
+    assert req["model"] == "claude-haiku-4-5"
+    assert "effort" not in req["output_config"] and "fallbacks" not in req
+    assert d.recommendation is Recommendation.NOT_PAYABLE
+
+
+def test_unknown_claude_model_is_rejected():
+    with pytest.raises(ValueError):
+        ClaudeReasoner(client=FakeClient(), model="claude-imaginary")
+
+
+class FakeOllamaHTTP:
+    def __init__(self, body):
+        self.body = body
+        self.calls = []
+
+    def post(self, url, json):
+        self.calls.append((url, json))
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: self.body)
+
+
+def test_ollama_reasoner_uses_structured_outputs_locally():
+    http = FakeOllamaHTTP(
+        {
+            "model": "qwen3:8b",
+            "done": True,
+            "prompt_eval_count": 1200,
+            "eval_count": 90,
+            "message": {"role": "assistant", "content": json.dumps(answer("applies", 0.85))},
+        }
+    )
+    reasoner = OllamaReasoner(model="qwen3:8b", url="http://gpu-box:11434/", http=http)
+    d = decide(SILVER, ambiguous_facts(), docs(), reasoner=reasoner)
+    url, body = http.calls[0]
+    assert url == "http://gpu-box:11434/api/chat"
+    assert body["format"]["required"][0] == "verdict" and body["stream"] is False
+    assert body["options"]["temperature"] == 0
+    s = next(f for f in d.findings if f.suggestion).suggestion
+    assert s.model == "ollama:qwen3:8b" and s.input_tokens == 1200
+    assert d.recommendation is Recommendation.NOT_PAYABLE and d.route is ReviewRoute.HUMAN_VERIFY

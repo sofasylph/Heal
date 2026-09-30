@@ -18,13 +18,16 @@ class RawDocument(BaseModel):
     doc_type: DocumentType | None = None  # caller may pre-label
 
 
-def ingest_documents(raw: list[RawDocument]) -> list[ClaimDocument]:
+def ingest_documents(raw: list[RawDocument], classifier=None) -> list[ClaimDocument]:
+    """`classifier` is any object with classify(text) -> (DocumentType, confidence);
+    defaults to the keyword classifier."""
+    classify_fn = classifier.classify if classifier is not None else classify
     docs = []
     for r in raw:
         if r.doc_type:
             dtype, conf = r.doc_type, 1.0
         else:
-            dtype, conf = classify(r.text)
+            dtype, conf = classify_fn(r.text)
         docs.append(
             ClaimDocument(
                 doc_id=f"DOC-{uuid.uuid4().hex[:8].upper()}",
