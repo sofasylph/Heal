@@ -7,6 +7,7 @@ import random
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from claimtrace.access import Actor, Role
 from claimtrace.claims import service
 from claimtrace.db.session import ClaimRow
 from claimtrace.domain.models import Recommendation
@@ -43,7 +44,7 @@ def seed_demo_data(session: Session, seed: int = 2181) -> int:
             service.override(
                 session,
                 claim.claim_id,
-                "a.reviewer",
+                Actor(user="a.senior", role=Role.SENIOR_REVIEWER),
                 Recommendation.NOT_PAYABLE,
                 0.0,
                 "Procedure is aesthetic in nature with no functional "

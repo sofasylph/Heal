@@ -198,6 +198,7 @@ class Decision(BaseModel):
     payable_lines: list[PayableLine]
     summary: str
     ai_assisted: bool = False  # recommendation relies on an LLM clause suggestion
+    models_used: dict[str, str] = Field(default_factory=dict)  # classifier/detector/reasoner
     engine_version: str
     policy_version: str
     decided_at: datetime
@@ -205,6 +206,7 @@ class Decision(BaseModel):
 
 class ReviewerOverride(BaseModel):
     reviewer: str
+    role: str = "reviewer"
     recommendation: Recommendation
     payable_amount: float
     reason: str

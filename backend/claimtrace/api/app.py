@@ -5,13 +5,15 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from fastapi.responses import JSONResponse
 
 from claimtrace import ENGINE_VERSION
+from claimtrace.access import AccessDenied
+from claimtrace.api.deps import DB, CurrentActor
+from claimtrace.api.routes_extra import router as extra_router
 from claimtrace.api.schemas import (
     AuditTrail,
     ClaimSummary,
@@ -21,15 +23,13 @@ from claimtrace.api.schemas import (
 )
 from claimtrace.audit.log import events_for, verify_chain
 from claimtrace.claims import service
-from claimtrace.db.session import SessionLocal, get_session, init_db
+from claimtrace.db.session import SessionLocal, init_db
 from claimtrace.domain.models import Claim
 from claimtrace.policies.models import Policy
 from claimtrace.policies.registry import get_policy, load_policies
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("claimtrace")
-
-DB = Annotated[Session, Depends(get_session)]
 
 
 @asynccontextmanager
@@ -57,6 +57,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(extra_router)
+
+
+@app.exception_handler(AccessDenied)
+async def access_denied(_: Request, exc: AccessDenied) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
 
 
 @app.get("/health")
@@ -95,13 +101,13 @@ def list_claims(session: DB) -> list[ClaimSummary]:
 
 
 @app.post("/claims", response_model=Claim, status_code=201)
-def create_claim(req: CreateClaimRequest, session: DB) -> Claim:
+def create_claim(req: CreateClaimRequest, session: DB, actor: CurrentActor) -> Claim:
     try:
-        claim = service.create_claim(session, req.policy_id, req.documents)
+        claim = service.create_claim(session, req.policy_id, req.documents, actor=actor)
     except KeyError as e:
         raise HTTPException(400, str(e)) from e
     if req.adjudicate:
-        claim = service.adjudicate(session, claim.claim_id)
+        claim = service.adjudicate(session, claim.claim_id, actor=actor)
     return claim
 
 
@@ -114,18 +120,18 @@ def get_claim(claim_id: str, session: DB) -> Claim:
 
 
 @app.post("/claims/{claim_id}/adjudicate", response_model=Claim)
-def adjudicate(claim_id: str, session: DB) -> Claim:
+def adjudicate(claim_id: str, session: DB, actor: CurrentActor) -> Claim:
     try:
-        return service.adjudicate(session, claim_id)
+        return service.adjudicate(session, claim_id, actor=actor)
     except service.NotFoundError as e:
         raise HTTPException(404, f"Unknown claim {claim_id}") from e
 
 
 @app.post("/claims/{claim_id}/override", response_model=Claim)
-def override(claim_id: str, req: OverrideRequest, session: DB) -> Claim:
+def override(claim_id: str, req: OverrideRequest, session: DB, actor: CurrentActor) -> Claim:
     try:
         return service.override(
-            session, claim_id, req.reviewer, req.recommendation, req.payable_amount, req.reason
+            session, claim_id, actor, req.recommendation, req.payable_amount, req.reason
         )
     except service.NotFoundError as e:
         raise HTTPException(404, f"Unknown claim {claim_id}") from e

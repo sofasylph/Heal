@@ -9,6 +9,9 @@ Scope and guard-rails:
     None, which leaves the finding in REVIEW and the claim escalated: fail closed.
   * Every suggestion carries model, prompt version and an input hash, and is written to
     the audit trail. An optional response cache makes evals reproducible and cheap.
+
+Providers: Claude (Haiku 4.5 / Sonnet 5.5 / Opus 5.5) via the Anthropic API, or any
+local open-weights model served by Ollama, so claim data can stay on-premises.
 """
 
 from __future__ import annotations
@@ -179,11 +182,102 @@ class ResponseCache:
 
 
 # ---------------------------------------------------------------------------
-# Claude implementation
+# Shared pipeline: prompt -> cache -> transport -> validate -> suggestion
 # ---------------------------------------------------------------------------
 
 
-class ClaudeReasoner:
+class _Reply(BaseModel):
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    served_model: str
+
+
+class _LLMReasoner:
+    """Base class. Subclasses implement `_call` for one provider; everything else
+    (prompting, caching, validation, fail-closed behaviour) is shared."""
+
+    name = "llm"
+    model = ""
+
+    def __init__(self, cache: ResponseCache | None = None):
+        self.cache = cache
+
+    def _call(self, system_text: str, user_text: str) -> _Reply | None:
+        raise NotImplementedError
+
+    def suggest(self, finding, facts, policy, documents) -> ReasonerSuggestion | None:
+        if not is_eligible(finding):
+            return None
+        system_text = SYSTEM_PROMPT + "\n" + policy_wording(policy)
+        user_text = build_question(finding, facts, documents)
+        input_sha = hashlib.sha256(
+            f"{self.name}\n{self.model}\n{PROMPT_VERSION}\n{system_text}\n{user_text}".encode()
+        ).hexdigest()
+        meta = {"model": self.model, "prompt_version": PROMPT_VERSION, "input_sha256": input_sha}
+
+        if self.cache and (hit := self.cache.get(input_sha)):
+            return _to_suggestion(hit, meta, cached=True)
+
+        started = time.monotonic()
+        try:
+            reply = self._call(system_text, user_text)
+        except Exception as e:  # any API/network failure: fail closed to human review
+            log.warning("Clause reasoner %s failed (%s): %s", self.name, type(e).__name__, e)
+            return None
+        if reply is None:
+            return None
+        try:
+            answer = _ModelAnswer.model_validate_json(reply.text)
+        except ValidationError as e:
+            log.warning("Clause reasoner %s returned invalid JSON: %s", self.name, e)
+            return None
+
+        answer_dict = answer.model_dump(mode="json") | {
+            "input_tokens": reply.input_tokens,
+            "output_tokens": reply.output_tokens,
+            "cache_read_input_tokens": reply.cache_read_input_tokens,
+            "latency_ms": int((time.monotonic() - started) * 1000),
+            "served_model": reply.served_model,
+        }
+        if self.cache:
+            self.cache.put(input_sha, answer_dict)
+        return _to_suggestion(answer_dict, meta, cached=False)
+
+
+def _to_suggestion(answer: dict, meta: dict, cached: bool) -> ReasonerSuggestion:
+    return ReasonerSuggestion(
+        verdict=answer["verdict"],
+        rationale=answer["rationale"],
+        evidence_quotes=answer.get("evidence_quotes", []),
+        missing_information=answer.get("missing_information", []),
+        confidence=min(max(float(answer["confidence"]), 0.0), 1.0),
+        model=answer.get("served_model", meta["model"]),
+        prompt_version=meta["prompt_version"],
+        input_sha256=meta["input_sha256"],
+        input_tokens=answer.get("input_tokens", 0),
+        output_tokens=answer.get("output_tokens", 0),
+        cache_read_input_tokens=answer.get("cache_read_input_tokens", 0),
+        latency_ms=answer.get("latency_ms", 0),
+        cached_response=cached,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Claude (Anthropic API)
+# ---------------------------------------------------------------------------
+
+# Per-model request shape. Haiku 4.5 takes no `effort` and is not given server-side
+# fallbacks; the 5.5 models get both.
+CLAUDE_MODELS: dict[str, dict] = {
+    "claude-haiku-4-5": {"effort": False, "fallbacks": False, "label": "Claude Haiku 4.5"},
+    "claude-sonnet-5-5": {"effort": True, "fallbacks": True, "label": "Claude Sonnet 5.5"},
+    "claude-opus-5-5": {"effort": True, "fallbacks": True, "label": "Claude Opus 5.5"},
+}
+
+
+class ClaudeReasoner(_LLMReasoner):
     name = "claude"
 
     def __init__(
@@ -193,6 +287,9 @@ class ClaudeReasoner:
         effort: str = "high",
         cache: ResponseCache | None = None,
     ):
+        super().__init__(cache)
+        if model not in CLAUDE_MODELS:
+            raise ValueError(f"Unsupported Claude model '{model}'")
         if client is None:
             import anthropic
 
@@ -200,95 +297,122 @@ class ClaudeReasoner:
         self.client = client
         self.model = model
         self.effort = effort
-        self.cache = cache
 
-    def suggest(self, finding, facts, policy, documents) -> ReasonerSuggestion | None:
-        if not is_eligible(finding):
-            return None
-        system_text = SYSTEM_PROMPT + "\n" + policy_wording(policy)
-        user_text = build_question(finding, facts, documents)
-        input_sha = hashlib.sha256(
-            f"{self.model}\n{PROMPT_VERSION}\n{system_text}\n{user_text}".encode()
-        ).hexdigest()
-        meta = {"model": self.model, "prompt_version": PROMPT_VERSION, "input_sha256": input_sha}
-
-        if self.cache and (hit := self.cache.get(input_sha)):
-            return self._to_suggestion(hit, meta, cached=True)
-
-        started = time.monotonic()
-        try:
+    def _call(self, system_text: str, user_text: str) -> _Reply | None:
+        spec = CLAUDE_MODELS[self.model]
+        output_config: dict = {"format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}}
+        if spec["effort"]:
+            output_config["effort"] = self.effort
+        kwargs = dict(
+            model=self.model,
+            max_tokens=16000,
+            output_config=output_config,
+            system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user_text}],
+        )
+        if spec["fallbacks"]:
             response = self.client.beta.messages.create(
-                model=self.model,
-                max_tokens=16000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                output_config={
-                    "effort": self.effort,
-                    "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
-                },
-                system=[
-                    {"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}
-                ],
-                messages=[{"role": "user", "content": user_text}],
+                betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs
             )
-        except Exception as e:  # any API/network failure: fail closed to human review
-            log.warning("Clause reasoner call failed (%s): %s", type(e).__name__, e)
-            return None
-        latency_ms = int((time.monotonic() - started) * 1000)
+        else:
+            response = self.client.messages.create(**kwargs)
 
         if response.stop_reason != "end_turn":
-            log.warning(
-                "Clause reasoner stopped with %s; leaving finding in review", response.stop_reason
-            )
+            log.warning("Clause reasoner stopped with %s; leaving in review", response.stop_reason)
             return None
-        text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), None)
-        try:
-            answer = _ModelAnswer.model_validate_json(text or "")
-        except ValidationError as e:
-            log.warning("Clause reasoner returned invalid JSON: %s", e)
-            return None
-
+        text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
         usage = response.usage
-        answer_dict = answer.model_dump(mode="json") | {
-            "input_tokens": getattr(usage, "input_tokens", 0) or 0,
-            "output_tokens": getattr(usage, "output_tokens", 0) or 0,
-            "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
-            "latency_ms": latency_ms,
-            "served_model": getattr(response, "model", self.model),
-        }
-        if self.cache:
-            self.cache.put(input_sha, answer_dict)
-        return self._to_suggestion(answer_dict, meta, cached=False)
-
-    @staticmethod
-    def _to_suggestion(answer: dict, meta: dict, cached: bool) -> ReasonerSuggestion:
-        return ReasonerSuggestion(
-            verdict=answer["verdict"],
-            rationale=answer["rationale"],
-            evidence_quotes=answer.get("evidence_quotes", []),
-            missing_information=answer.get("missing_information", []),
-            confidence=min(max(float(answer["confidence"]), 0.0), 1.0),
-            model=answer.get("served_model", meta["model"]),
-            prompt_version=meta["prompt_version"],
-            input_sha256=meta["input_sha256"],
-            input_tokens=answer.get("input_tokens", 0),
-            output_tokens=answer.get("output_tokens", 0),
-            cache_read_input_tokens=answer.get("cache_read_input_tokens", 0),
-            latency_ms=answer.get("latency_ms", 0),
-            cached_response=cached,
+        return _Reply(
+            text=text,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            served_model=getattr(response, "model", self.model),
         )
+
+
+# ---------------------------------------------------------------------------
+# Local open-weights models via Ollama (data never leaves the machine)
+# ---------------------------------------------------------------------------
+
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_OLLAMA_MODEL = "qwen3:8b"
+
+
+class OllamaReasoner(_LLMReasoner):
+    name = "ollama"
+
+    def __init__(
+        self,
+        model: str = DEFAULT_OLLAMA_MODEL,
+        url: str = DEFAULT_OLLAMA_URL,
+        cache: ResponseCache | None = None,
+        http=None,
+        timeout: float = 120.0,
+    ):
+        super().__init__(cache)
+        import httpx
+
+        self.model = model
+        self.url = url.rstrip("/")
+        self.http = http or httpx.Client(timeout=timeout)
+
+    def _call(self, system_text: str, user_text: str) -> _Reply | None:
+        r = self.http.post(
+            f"{self.url}/api/chat",
+            json={
+                "model": self.model,
+                "stream": False,
+                "format": OUTPUT_SCHEMA,  # Ollama structured outputs
+                "options": {"temperature": 0},
+                "messages": [
+                    {"role": "system", "content": system_text},
+                    {"role": "user", "content": user_text},
+                ],
+            },
+        )
+        r.raise_for_status()
+        body = r.json()
+        if not body.get("done", True):
+            return None
+        return _Reply(
+            text=body.get("message", {}).get("content", ""),
+            input_tokens=body.get("prompt_eval_count", 0) or 0,
+            output_tokens=body.get("eval_count", 0) or 0,
+            served_model=f"ollama:{body.get('model', self.model)}",
+        )
+
+
+def ollama_models(url: str = DEFAULT_OLLAMA_URL, timeout: float = 1.5) -> list[str] | None:
+    """Installed Ollama models, or None if the server is unreachable."""
+    import httpx
+
+    try:
+        r = httpx.get(f"{url.rstrip('/')}/api/tags", timeout=timeout)
+        r.raise_for_status()
+        return sorted(m["name"] for m in r.json().get("models", []))
+    except Exception:
+        return None
 
 
 def get_reasoner() -> ClauseReasoner:
-    """Configured from the environment; defaults to no LLM."""
+    """Configured from the environment; defaults to no LLM. The API uses the
+    settings store instead (claimtrace/settings)."""
     provider = os.getenv("CLAIMTRACE_LLM_PROVIDER", "none").lower()
+    cache_path = os.getenv("CLAIMTRACE_LLM_CACHE")
+    cache = ResponseCache(Path(cache_path)) if cache_path else None
     if provider == "none":
         return NullReasoner()
     if provider == "claude":
-        cache_path = os.getenv("CLAIMTRACE_LLM_CACHE")
         return ClaudeReasoner(
             model=os.getenv("CLAIMTRACE_LLM_MODEL", DEFAULT_MODEL),
             effort=os.getenv("CLAIMTRACE_LLM_EFFORT", "high"),
-            cache=ResponseCache(Path(cache_path)) if cache_path else None,
+            cache=cache,
         )
-    raise ValueError(f"Unknown CLAIMTRACE_LLM_PROVIDER '{provider}' (use 'none' or 'claude')")
+    if provider == "ollama":
+        return OllamaReasoner(
+            model=os.getenv("CLAIMTRACE_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
+            url=os.getenv("CLAIMTRACE_OLLAMA_URL", DEFAULT_OLLAMA_URL),
+            cache=cache,
+        )
+    raise ValueError(f"Unknown CLAIMTRACE_LLM_PROVIDER '{provider}' (none, claude, ollama)")

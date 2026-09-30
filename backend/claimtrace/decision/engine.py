@@ -59,14 +59,20 @@ def decide(
     facts: ClaimFacts,
     documents: list[ClaimDocument],
     reasoner: ClauseReasoner | None = None,
+    anomaly_detector=None,
+    models_used: dict[str, str] | None = None,
 ) -> Decision:
+    """`anomaly_detector` is any object with detect(facts) -> list[AnomalyFlag]
+    (defaults to the rules); `models_used` is recorded on the decision for audit."""
     result = run_rules(policy, facts, documents)
     findings = result.findings
     if reasoner is not None:
         for f in findings:
             if is_eligible(f):
                 f.suggestion = reasoner.suggest(f, facts, policy, documents)
-    anomalies = detect_anomalies(facts)
+    anomalies = (
+        anomaly_detector.detect(facts) if anomaly_detector is not None else detect_anomalies(facts)
+    )
     risk = risk_score(anomalies)
     claimed = facts.claimed_amount if facts.claimed_amount is not None else facts.bill_total
 
@@ -116,6 +122,7 @@ def decide(
         payable_lines=result.payable_lines,
         summary=_summarise(rec, route, claimed, payable, findings, ai_assisted),
         ai_assisted=ai_assisted,
+        models_used=models_used or {},
         engine_version=ENGINE_VERSION,
         policy_version=f"{policy.policy_id}@{policy.version}",
         decided_at=datetime.now(UTC),

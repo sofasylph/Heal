@@ -36,6 +36,7 @@ class Scenario(StrEnum):
     MISSING_DOCUMENT = "missing_document"
     CONFLICTING_DATES = "conflicting_dates"
     DUPLICATE_LINE = "duplicate_line"
+    PADDED_PHARMACY = "padded_pharmacy"  # normal total, abnormal bill mix: rules can't see it
 
 
 SCENARIO_WEIGHTS = {
@@ -52,6 +53,7 @@ SCENARIO_WEIGHTS = {
     Scenario.MISSING_DOCUMENT: 0.06,
     Scenario.CONFLICTING_DATES: 0.06,
     Scenario.DUPLICATE_LINE: 0.07,
+    Scenario.PADDED_PHARMACY: 0.06,
 }
 
 CATALOG = [
@@ -409,6 +411,53 @@ def render_documents(rng: random.Random, tf: TruthFacts, scenario: Scenario) -> 
     return docs
 
 
+DRUGS = ["Paracetamol 650 mg", "Pantoprazole 40 mg", "Cefuroxime 500 mg"]
+
+
+def render_auxiliary_documents(rng: random.Random, tf: TruthFacts) -> list[RawDocument]:
+    """Other document types a claim file can contain (used to train/test classifiers)."""
+    report = "\n".join(
+        [
+            f"{tf.hospital.upper()} - DEPARTMENT OF LABORATORY MEDICINE",
+            "INVESTIGATION REPORT",
+            f"Patient Name: {tf.patient_name}    Age: {tf.patient_age}",
+            f"Specimen: {rng.choice(['Blood (EDTA)', 'Serum', 'Urine'])}",
+            "Test                      Result     Reference Range",
+            f"Haemoglobin               {rng.uniform(9, 15):.1f} g/dL  12.0 - 16.0",
+            f"Platelet count            {rng.randint(40, 350)}k /uL  150 - 450",
+            f"Impression: Findings consistent with {tf.diagnosis.lower()}.",
+        ]
+    )
+    preauth = "\n".join(
+        [
+            "REQUEST FOR CASHLESS HOSPITALISATION - PRE-AUTHORISATION FORM",
+            f"Hospital Name: {tf.hospital}",
+            f"Patient Name: {tf.patient_name}",
+            f"Policy Number: {tf.policy_number}",
+            f"Proposed line of treatment: {tf.procedure}",
+            f"Expected length of stay: {(tf.discharge_date - tf.admission_date).days} days",
+            f"Estimated cost: INR {_money(tf.claimed_amount * rng.uniform(0.8, 1.1))}",
+            "Cashless request submitted to TPA for approval.",
+        ]
+    )
+    rx = "\n".join(
+        [
+            f"Dr. {rng.choice(FIRST)} {rng.choice(LAST)}, MS",
+            "PRESCRIPTION",
+            f"Patient: {tf.patient_name}",
+            "Rx",
+            f"1. Tab. {rng.choice(DRUGS)} - 1 tab twice daily x 5 days",
+            f"2. Tab. {rng.choice(['Ondansetron 4 mg', 'Aceclofenac 100 mg'])} - SOS",
+            "Sig: after food. Review after 7 days.",
+        ]
+    )
+    return [
+        RawDocument(filename="lab_report.txt", text=report, doc_type="diagnostic_report"),
+        RawDocument(filename="preauth.txt", text=preauth, doc_type="pre_auth"),
+        RawDocument(filename="prescription.txt", text=rx, doc_type="prescription"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Scenario construction
 # ---------------------------------------------------------------------------
@@ -469,7 +518,7 @@ def generate_claim(
     elif scenario is Scenario.CONFLICTING_DATES:
         requires_human = True
         case = rng.choice([c for c in CATALOG if c["key"] not in ("cataract", "knee")])
-    elif scenario is Scenario.DUPLICATE_LINE:
+    elif scenario in (Scenario.DUPLICATE_LINE, Scenario.PADDED_PHARMACY):
         requires_human = True
         should_flag = True
 
@@ -483,6 +532,14 @@ def generate_claim(
     if scenario is Scenario.DUPLICATE_LINE:
         dup = next(li for li in lines if li.category is BillCategory.DIAGNOSTICS)
         lines.append(Line(dup.description, dup.category, dup.amount, duplicate=True))
+    if scenario is Scenario.PADDED_PHARMACY:
+        # Pharmacy padded ~4x while professional fees are trimmed, so the bill total stays
+        # within the normal range for the procedure. Payable under the policy, but odd.
+        for li in lines:
+            if li.category is BillCategory.MEDICINES:
+                li.amount = _amt(rng, li.amount * rng.uniform(3.5, 4.5))
+            elif li.category in (BillCategory.PROCEDURE, BillCategory.SURGEON_FEE):
+                li.amount = _amt(rng, li.amount * 0.6)
 
     tf = TruthFacts(
         patient_name=f"{rng.choice(FIRST)} {rng.choice(LAST)}",

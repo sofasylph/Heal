@@ -1,0 +1,75 @@
+{
+  "document_classifiers": [
+    {
+      "classifier": "keyword",
+      "documents": 480,
+      "clean_accuracy_pct": 100.0,
+      "degraded_accuracy_pct": 85.2
+    },
+    {
+      "classifier": "tfidf_logreg",
+      "documents": 480,
+      "clean_accuracy_pct": 100.0,
+      "degraded_accuracy_pct": 99.8
+    }
+  ],
+  "anomaly_detectors": [
+    {
+      "detector": "rules",
+      "decision_agreement_pct": 93.5,
+      "unsafe_straight_through_pct": 0.0,
+      "escalation_recall_pct": 77.6,
+      "straight_through_pct": 46.5,
+      "anomaly_recall_pct": 50.0,
+      "anomaly_precision_pct": 71.4
+    },
+    {
+      "detector": "isolation_forest",
+      "decision_agreement_pct": 93.5,
+      "unsafe_straight_through_pct": 4.5,
+      "escalation_recall_pct": 80.6,
+      "straight_through_pct": 43.5,
+      "anomaly_recall_pct": 56.7,
+      "anomaly_precision_pct": 45.9
+    },
+    {
+      "detector": "hybrid",
+      "decision_agreement_pct": 93.5,
+      "unsafe_straight_through_pct": 0.0,
+      "escalation_recall_pct": 95.5,
+      "straight_through_pct": 38.5,
+      "anomaly_recall_pct": 90.0,
+      "anomaly_precision_pct": 54.0
+    }
+  ],
+  "clause_reasoners": [
+    {
+      "reasoner": "none",
+      "decision_agreement_pct": 93.5,
+      "unsafe_straight_through_pct": 0.0,
+      "escalation_recall_pct": 95.5,
+      "straight_through_pct": 38.5,
+      "suggestions": 0,
+      "suggestion_accuracy_pct": null,
+      "uncertain_pct": null,
+      "mean_latency_ms": 0,
+      "estimated_cost_usd": null
+    },
+    {
+      "reasoner": "claude:claude-haiku-4-5",
+      "skipped": "no Anthropic credentials"
+    },
+    {
+      "reasoner": "claude:claude-sonnet-5-5",
+      "skipped": "no Anthropic credentials"
+    },
+    {
+      "reasoner": "claude:claude-opus-5-5",
+      "skipped": "no Anthropic credentials"
+    },
+    {
+      "reasoner": "ollama:qwen3:8b",
+      "skipped": "Ollama not reachable on localhost:11434"
+    }
+  ]
+}
