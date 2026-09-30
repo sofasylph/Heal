@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from functools import lru_cache
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from claimtrace.audit.log import AuditAction, record
 from claimtrace.db.session import ClaimRow
-from claimtrace.decision.engine import decide
+from claimtrace.decision.engine import decide, effective_outcome
+from claimtrace.decision.reasoner import ClauseReasoner, get_reasoner
 from claimtrace.domain.models import Claim, ClaimStatus, Recommendation, ReviewerOverride
 from claimtrace.extraction.pipeline import RawDocument, extract, ingest_documents
 from claimtrace.policies.registry import get_policy
@@ -21,6 +23,11 @@ SYSTEM = "system:claimtrace"
 
 class NotFoundError(Exception):
     pass
+
+
+@lru_cache
+def _reasoner() -> ClauseReasoner:
+    return get_reasoner()
 
 
 def _save(session: Session, claim: Claim) -> None:
@@ -108,7 +115,8 @@ def adjudicate(session: Session, claim_id: str) -> Claim:
     policy = get_policy(claim.policy_id)
     if claim.facts is None:
         claim.facts = extract(claim.documents)
-    decision = decide(policy, claim.facts, claim.documents)
+    reasoner = _reasoner()
+    decision = decide(policy, claim.facts, claim.documents, reasoner=reasoner)
     record(
         session,
         claim_id,
@@ -117,10 +125,27 @@ def adjudicate(session: Session, claim_id: str) -> Claim:
         {
             "policy_version": decision.policy_version,
             "engine_version": decision.engine_version,
-            "findings": [f.model_dump(mode="json") for f in decision.findings],
+            "findings": [
+                f.model_dump(mode="json", exclude={"suggestion"}) for f in decision.findings
+            ],
             "anomalies": [a.model_dump(mode="json") for a in decision.anomalies],
         },
     )
+    for f in decision.findings:
+        if f.suggestion is None:
+            continue
+        record(
+            session,
+            claim_id,
+            f"llm:{f.suggestion.model}",
+            AuditAction.LLM_SUGGESTED,
+            {
+                "rule_id": f.rule_id,
+                "clause_id": f.clause.clause_id if f.clause else None,
+                "suggestion": f.suggestion.model_dump(mode="json"),
+                "applied_to_recommendation": effective_outcome(f) is not f.outcome,
+            },
+        )
     record(
         session,
         claim_id,
@@ -133,7 +158,8 @@ def adjudicate(session: Session, claim_id: str) -> Claim:
             "payable_amount": decision.payable_amount,
             "confidence": decision.confidence,
             "risk_score": decision.risk_score,
-            "llm_used": False,
+            "reasoner": reasoner.name,
+            "ai_assisted": decision.ai_assisted,
         },
     )
     claim.decision = decision

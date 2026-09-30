@@ -5,6 +5,14 @@ Routing policy (the product decision, not the model's):
   * confidence < 0.90, risk >= 0.30, or any denial           -> HUMAN_VERIFY
   * otherwise                                                -> AUTO_CANDIDATE
 Denials are never auto-processed: a human signs off on every "not payable".
+
+LLM clause reasoner (optional): for REVIEW findings it may suggest whether the clause
+applies. A suggestion at or above SUGGESTION_CONFIDENCE is treated as DENY / PASS when
+forming the recommendation, but
+  * the underlying finding stays REVIEW in the record (deterministic result preserved),
+  * payable amounts are never changed by a suggestion,
+  * any claim whose recommendation depends on a suggestion is at least HUMAN_VERIFY:
+    the model can move a claim from "escalate" to "verify", never to straight-through.
 """
 
 from __future__ import annotations
@@ -13,10 +21,13 @@ from datetime import UTC, datetime
 
 from claimtrace import ENGINE_VERSION
 from claimtrace.anomaly.detector import detect_anomalies, risk_score
+from claimtrace.decision.reasoner import ClauseReasoner, is_eligible
 from claimtrace.domain.models import (
     ClaimDocument,
     ClaimFacts,
+    ClauseVerdict,
     Decision,
+    Finding,
     FindingOutcome,
     Recommendation,
     ReviewRoute,
@@ -28,16 +39,42 @@ ESCALATE_CONFIDENCE = 0.70
 VERIFY_CONFIDENCE = 0.90
 ESCALATE_RISK = 0.60
 VERIFY_RISK = 0.30
+SUGGESTION_CONFIDENCE = 0.80
 
 
-def decide(policy: Policy, facts: ClaimFacts, documents: list[ClaimDocument]) -> Decision:
+def effective_outcome(f: Finding) -> FindingOutcome:
+    """Outcome used for the recommendation, after any confident LLM suggestion."""
+    s = f.suggestion
+    if f.outcome is not FindingOutcome.REVIEW or s is None or s.confidence < SUGGESTION_CONFIDENCE:
+        return f.outcome
+    if s.verdict is ClauseVerdict.APPLIES:
+        return FindingOutcome.DENY
+    if s.verdict is ClauseVerdict.DOES_NOT_APPLY:
+        return FindingOutcome.PASS
+    return FindingOutcome.REVIEW
+
+
+def decide(
+    policy: Policy,
+    facts: ClaimFacts,
+    documents: list[ClaimDocument],
+    reasoner: ClauseReasoner | None = None,
+) -> Decision:
     result = run_rules(policy, facts, documents)
     findings = result.findings
+    if reasoner is not None:
+        for f in findings:
+            if is_eligible(f):
+                f.suggestion = reasoner.suggest(f, facts, policy, documents)
     anomalies = detect_anomalies(facts)
     risk = risk_score(anomalies)
     claimed = facts.claimed_amount if facts.claimed_amount is not None else facts.bill_total
 
-    outcomes = {f.outcome for f in findings}
+    outcomes = {effective_outcome(f) for f in findings}
+    ai_assisted = any(
+        f.outcome is FindingOutcome.REVIEW and effective_outcome(f) is not FindingOutcome.REVIEW
+        for f in findings
+    )
     payable = result.payable_amount
     if FindingOutcome.NEEDS_INFO in outcomes:
         rec, payable = Recommendation.NEEDS_INFO, 0.0
@@ -48,7 +85,7 @@ def decide(policy: Policy, facts: ClaimFacts, documents: list[ClaimDocument]) ->
     else:
         rec = Recommendation.PARTIAL
 
-    confidence = round(min((f.confidence for f in findings), default=0.0), 3)
+    confidence = round(min((_confidence(f) for f in findings), default=0.0), 3)
 
     if (
         FindingOutcome.REVIEW in outcomes
@@ -64,6 +101,8 @@ def decide(policy: Policy, facts: ClaimFacts, documents: list[ClaimDocument]) ->
         route = ReviewRoute.HUMAN_VERIFY
     else:
         route = ReviewRoute.AUTO_CANDIDATE
+    if ai_assisted and route is ReviewRoute.AUTO_CANDIDATE:
+        route = ReviewRoute.HUMAN_VERIFY
 
     return Decision(
         recommendation=rec,
@@ -75,14 +114,21 @@ def decide(policy: Policy, facts: ClaimFacts, documents: list[ClaimDocument]) ->
         findings=findings,
         anomalies=anomalies,
         payable_lines=result.payable_lines,
-        summary=_summarise(rec, route, claimed, payable, findings),
+        summary=_summarise(rec, route, claimed, payable, findings, ai_assisted),
+        ai_assisted=ai_assisted,
         engine_version=ENGINE_VERSION,
         policy_version=f"{policy.policy_id}@{policy.version}",
         decided_at=datetime.now(UTC),
     )
 
 
-def _summarise(rec, route, claimed, payable, findings) -> str:
+def _confidence(f: Finding) -> float:
+    if effective_outcome(f) is not f.outcome and f.suggestion is not None:
+        return f.suggestion.confidence
+    return f.confidence
+
+
+def _summarise(rec, route, claimed, payable, findings, ai_assisted=False) -> str:
     material = [f for f in findings if f.outcome not in (FindingOutcome.PASS,)]
     head = {
         Recommendation.PAY: f"Payable in full: INR {payable:,.0f}.",
@@ -97,4 +143,5 @@ def _summarise(rec, route, claimed, payable, findings) -> str:
         ReviewRoute.HUMAN_VERIFY: "Reviewer verification required.",
         ReviewRoute.ESCALATE: "Escalated for senior review.",
     }[route]
-    return " ".join(x for x in (head, reasons, tail) if x)
+    ai = "Includes an AI-suggested clause reading; reviewer must confirm." if ai_assisted else ""
+    return " ".join(x for x in (head, reasons, ai, tail) if x)

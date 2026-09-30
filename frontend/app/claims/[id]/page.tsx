@@ -5,7 +5,14 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/components/ApiError";
 import { Badge, Meter } from "@/components/Badge";
-import { api, type AuditTrail, type Claim, type Finding, type Recommendation } from "@/lib/api";
+import {
+  api,
+  type AuditTrail,
+  type Claim,
+  type Finding,
+  type ReasonerSuggestion,
+  type Recommendation,
+} from "@/lib/api";
 import { inr, label, pct } from "@/lib/format";
 
 const TABS = ["Decision", "Payable breakdown", "Extracted facts", "Anomalies", "Documents", "Audit trail"] as const;
@@ -46,6 +53,7 @@ export default function ClaimDetail() {
             <h1 className="text-xl font-semibold">{claim.claim_id}</h1>
             <Badge value={d?.recommendation} />
             <Badge value={d?.route} />
+            {d?.ai_assisted && <Badge value="ai" />}
             {claim.override && <span className="text-xs text-slate-500">reviewed by {claim.override.reviewer}</span>}
           </div>
           <p className="text-sm text-slate-600">
@@ -129,9 +137,41 @@ function Findings({ findings }: { findings: Finding[] }) {
               {f.clause.excerpt}
             </blockquote>
           )}
+          {f.suggestion && <Suggestion s={f.suggestion} />}
         </li>
       ))}
     </ul>
+  );
+}
+
+function Suggestion({ s }: { s: ReasonerSuggestion }) {
+  return (
+    <div className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-indigo-800">AI clause reading</span>
+          <Badge value={s.verdict} />
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          <span>{s.model} · {s.prompt_version}</span>
+          <Meter value={s.confidence} />
+        </div>
+      </div>
+      <p className="mt-2 text-slate-800">{s.rationale}</p>
+      {s.evidence_quotes.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+          {s.evidence_quotes.map((q, i) => (
+            <li key={i} className="border-l-2 border-indigo-300 pl-2 italic">“{q}”</li>
+          ))}
+        </ul>
+      )}
+      {s.missing_information.length > 0 && (
+        <p className="mt-2 text-xs text-amber-800">Missing: {s.missing_information.join("; ")}</p>
+      )}
+      <p className="mt-2 text-xs text-slate-500">
+        Advisory only. It never changes amounts, and the reviewer makes the final call. Input hash {s.input_sha256.slice(0, 12)}…
+      </p>
+    </div>
   );
 }
 

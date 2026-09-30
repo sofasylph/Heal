@@ -10,6 +10,10 @@ const TONES: Record<string, string> = {
   adjust: "bg-sky-50 text-sky-700 ring-sky-600/20",
   deny: "bg-rose-50 text-rose-700 ring-rose-600/20",
   review: "bg-violet-50 text-violet-700 ring-violet-600/20",
+  applies: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  does_not_apply: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  uncertain: "bg-amber-50 text-amber-800 ring-amber-600/20",
+  ai: "bg-indigo-50 text-indigo-700 ring-indigo-600/20",
 };
 
 const TEXT: Record<string, string> = {
@@ -18,6 +22,10 @@ const TEXT: Record<string, string> = {
   escalate: "Escalate",
   not_payable: "Not payable",
   needs_info: "Needs info",
+  applies: "Clause applies",
+  does_not_apply: "Clause does not apply",
+  uncertain: "Uncertain",
+  ai: "AI-assisted",
 };
 
 export function Badge({ value }: { value: string | null | undefined }) {

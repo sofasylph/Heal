@@ -3,10 +3,14 @@
 v0.1 is a working skeleton. Each milestone below ships with an eval delta, so a feature isn't "done" until the benchmark says what it changed.
 
 ## v0.2: LLM clause reasoner (targets the ambiguous-exclusion failures)
-- [ ] Implement `ClauseReasoner` (Claude API) for `REVIEW` findings only. Inputs: the clause text, diagnosis/procedure, and the matched term. Output: a schema-validated suggestion with rationale.
-- [ ] Record model, prompt version, input hash and raw response in the audit log.
-- [ ] The reasoner can only change routing or add a *suggested* outcome. It can never override a deterministic DENY/ADJUST.
-- [ ] New eval metrics: suggestion accuracy on ambiguous cases, unsupported-claim rate, cost and latency per claim.
+- [x] `ClaudeReasoner` for `REVIEW` findings only: full policy wording (prompt-cached) plus claim facts in, schema-constrained verdict / rationale / quotes / confidence out.
+- [x] Model, prompt version, input hash, tokens and latency recorded as an `llm_suggested` audit event.
+- [x] Suggestions never change amounts and never allow straight-through. Fails closed on any error or refusal.
+- [x] Eval metrics (suggestion accuracy, uncertain share, tokens, latency, cost) plus a JSONL response cache for reproducible reruns.
+- [x] New "ambiguous but covered" scenario, so the eval penalises an over-eager "applies".
+- [ ] **Record the first real run** (`make eval-llm`), commit `docs/eval/llm_cache.jsonl`, and publish the before/after.
+- [ ] Effort sweep (low / medium / high) and prompt iteration against the cached eval.
+- [ ] Calibrate the 0.80 confidence gate against reviewer overrides.
 
 ## v0.3: Real documents
 - [ ] PDF/image ingestion (pdfplumber + OCR fallback).

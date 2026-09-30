@@ -26,6 +26,7 @@ class AuditAction(StrEnum):
     DOCUMENTS_INGESTED = "documents_ingested"
     FACTS_EXTRACTED = "facts_extracted"
     RULES_EVALUATED = "rules_evaluated"
+    LLM_SUGGESTED = "llm_suggested"
     DECISION_RECOMMENDED = "decision_recommended"
     HUMAN_OVERRIDE = "human_override"
 
