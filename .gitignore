@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+*.db
+backend/eval-out/
+
+# Node
+node_modules/
+.next/
+
+# Env
+.env
+.env.*
+!.env.example
+
+.DS_Store

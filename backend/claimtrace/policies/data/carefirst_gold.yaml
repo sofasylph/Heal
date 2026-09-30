@@ -1,0 +1,119 @@
+# SYNTHETIC POLICY for demonstration only. Insurer and product are fictional.
+policy_id: CAREFIRST-GOLD
+version: "2024.2"
+name: CareFirst Gold Family Floater
+insurer: Sample Health Insurance Ltd. (fictional)
+description: >
+  Family floater, sum insured INR 10,00,000. No room rent cap (any single private room),
+  24-month PED waiting, INR 25,000 aggregate deductible, cataract sublimit INR 60,000.
+
+clauses:
+  - clause_id: "A.1"
+    title: Sum Insured
+    page: 3
+    text: >
+      The Sum Insured of INR 10,00,000 is available on a floater basis for all insured
+      persons during the Policy Year.
+  - clause_id: "B.1"
+    title: Initial Waiting Period
+    page: 7
+    text: >
+      Any illness contracted within 30 days of the first policy start date is excluded,
+      except treatment arising from an accident.
+  - clause_id: "B.2"
+    title: Pre-Existing Diseases
+    page: 7
+    text: >
+      Pre-existing diseases declared in the proposal form are covered after 24 months of
+      continuous coverage.
+  - clause_id: "B.3"
+    title: Specific Waiting Period
+    page: 8
+    text: >
+      Cataract, hernia and joint replacement surgery are covered after 12 months of
+      continuous coverage.
+  - clause_id: "C.2"
+    title: Accommodation
+    page: 10
+    text: >
+      Room rent is payable for any single private air-conditioned room without sub-limit.
+  - clause_id: "C.5"
+    title: Sublimit - Cataract
+    page: 11
+    text: >
+      Cataract treatment is payable up to INR 60,000 per eye.
+  - clause_id: "D.1"
+    title: Aggregate Deductible
+    page: 13
+    text: >
+      An aggregate deductible of INR 25,000 applies per policy year; the Company is liable
+      only for admissible amounts in excess of the deductible.
+  - clause_id: "D.2"
+    title: Co-payment
+    page: 13
+    text: >
+      No co-payment applies under this Policy.
+  - clause_id: "E.1"
+    title: Permanent Exclusion - Cosmetic Treatment
+    page: 15
+    text: >
+      Cosmetic, aesthetic and related treatments are excluded unless medically necessary
+      following an accident or cancer.
+  - clause_id: "E.4"
+    title: Non-Payable Items
+    page: 16
+    text: >
+      Non-medical items per IRDAI list of non-medical expenses, including consumables,
+      toiletries and registration charges, are not payable.
+  - clause_id: "F.2"
+    title: Claim Documents
+    page: 19
+    text: >
+      Reimbursement claims require the claim form, discharge summary and itemised final
+      bill. Diagnostic reports are required for surgical claims.
+
+rules:
+  sum_insured: 1000000
+  sum_insured_clause: "A.1"
+  room_rent_cap_per_day: null
+  icu_cap_per_day: null
+  room_rent_clause: "C.2"
+  proportionate_deduction_categories: []
+  initial_waiting_days: 30
+  initial_waiting_clause: "B.1"
+  ped_waiting_months: 24
+  ped_clause: "B.2"
+  specific_waiting_periods:
+    - name: Cataract
+      keywords: [cataract, phacoemulsification]
+      related_terms: [intraocular lens, lens opacity]
+      months: 12
+      clause_id: "B.3"
+    - name: Hernia
+      keywords: [hernia, herniorrhaphy, hernioplasty]
+      months: 12
+      clause_id: "B.3"
+    - name: Joint replacement
+      keywords: [knee replacement, hip replacement, arthroplasty]
+      months: 12
+      clause_id: "B.3"
+  sublimits:
+    - name: Cataract
+      keywords: [cataract, phacoemulsification]
+      max_amount: 60000
+      clause_id: "C.5"
+  exclusions:
+    - name: Cosmetic treatment
+      keywords: [cosmetic, rhinoplasty, liposuction, abdominoplasty]
+      related_terms: [aesthetic, reshaping, contouring]
+      clause_id: "E.1"
+  non_payable_categories: [consumables]
+  non_payable_keywords: [registration, toiletries, attendant]
+  non_payable_clause: "E.4"
+  deductible: 25000
+  deductible_clause: "D.1"
+  copay_percent: 0
+  copay_min_age: null
+  copay_clause: "D.2"
+  required_documents: [claim_form, discharge_summary, invoice]
+  required_documents_clause: "F.2"

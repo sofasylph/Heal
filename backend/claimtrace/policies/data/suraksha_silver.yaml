@@ -1,0 +1,153 @@
+# SYNTHETIC POLICY for demonstration only. Insurer and product are fictional.
+# Clause structure is modelled on common Indian retail indemnity health policies.
+policy_id: SURAKSHA-SILVER
+version: "2024.1"
+name: Suraksha Silver Health Plan
+insurer: Sample General Insurance Co. (fictional)
+description: >
+  Individual indemnity plan, sum insured INR 5,00,000. Room rent capped at 1% of sum
+  insured per day with proportionate deduction, 10% co-pay for insured aged 61+,
+  sublimits on cataract and joint replacement.
+
+clauses:
+  - clause_id: "2.1"
+    title: Sum Insured
+    page: 4
+    text: >
+      The Company's total liability for all claims during the Policy Period shall not
+      exceed the Sum Insured of INR 5,00,000 stated in the Policy Schedule.
+  - clause_id: "3.1"
+    title: Initial Waiting Period
+    page: 9
+    text: >
+      Expenses related to the treatment of any illness within 30 days from the first
+      policy commencement date shall be excluded, except claims arising due to an accident.
+  - clause_id: "3.2"
+    title: Pre-Existing Diseases
+    page: 9
+    text: >
+      Expenses related to the treatment of a pre-existing disease (PED) and its direct
+      complications shall be excluded until the expiry of 36 months of continuous coverage
+      after the date of inception of the first policy.
+  - clause_id: "3.3"
+    title: Specified Disease/Procedure Waiting Period
+    page: 10
+    text: >
+      Expenses related to the treatment of the listed conditions, surgeries or treatments
+      shall be excluded until the expiry of 24 months of continuous coverage, including
+      cataract, hernia, benign prostatic hypertrophy, and joint replacement surgery.
+  - clause_id: "4.2"
+    title: Room Rent and ICU Limits
+    page: 12
+    text: >
+      Room rent, boarding and nursing expenses are payable up to 1% of the Sum Insured
+      per day (INR 5,000) and ICU charges up to 2% of the Sum Insured per day (INR 10,000).
+      If the insured occupies a room category above the eligible limit, all associated
+      medical expenses shall be payable in the proportion that the eligible room rent bears
+      to the actual room rent, except for cost of pharmacy, consumables, implants and
+      diagnostics.
+  - clause_id: "4.5"
+    title: Sublimit - Cataract
+    page: 13
+    text: >
+      Treatment of cataract is payable up to a maximum of INR 40,000 per eye per
+      policy year.
+  - clause_id: "4.6"
+    title: Sublimit - Joint Replacement
+    page: 13
+    text: >
+      Joint replacement surgery is payable up to a maximum of INR 2,00,000 per joint.
+  - clause_id: "5.1"
+    title: Deductible
+    page: 15
+    text: >
+      No deductible applies to claims under this Policy.
+  - clause_id: "5.3"
+    title: Co-payment
+    page: 15
+    text: >
+      Each admissible claim shall be subject to a co-payment of 10% of the admissible
+      claim amount where the insured person is aged 61 years or above at the time of
+      admission.
+  - clause_id: "6.1"
+    title: Permanent Exclusion - Cosmetic Treatment
+    page: 17
+    text: >
+      Expenses for cosmetic or plastic surgery or any treatment to change appearance,
+      unless for reconstruction following an accident, burn or cancer, are excluded.
+  - clause_id: "6.2"
+    title: Permanent Exclusion - Obesity Treatment
+    page: 17
+    text: >
+      Expenses related to surgical treatment of obesity are excluded unless the
+      conditions specified in Annexure IV are met.
+  - clause_id: "6.3"
+    title: Non-Payable Items
+    page: 18
+    text: >
+      Items listed in Annexure I (List of Non-Medical Expenses), including gloves, masks,
+      disposable consumables, toiletries, attendant charges and registration fees, are
+      not payable.
+  - clause_id: "7.4"
+    title: Claim Documents
+    page: 21
+    text: >
+      Claims must be supported by a duly completed claim form, discharge summary and
+      final hospital bill with itemised break-up.
+
+rules:
+  sum_insured: 500000
+  sum_insured_clause: "2.1"
+  room_rent_cap_per_day: 5000
+  icu_cap_per_day: 10000
+  room_rent_clause: "4.2"
+  proportionate_deduction_categories: [procedure, surgeon_fee, nursing, other]
+  initial_waiting_days: 30
+  initial_waiting_clause: "3.1"
+  ped_waiting_months: 36
+  ped_clause: "3.2"
+  specific_waiting_periods:
+    - name: Cataract
+      keywords: [cataract, phacoemulsification]
+      related_terms: [intraocular lens, lens opacity]
+      months: 24
+      clause_id: "3.3"
+    - name: Hernia
+      keywords: [hernia, herniorrhaphy, hernioplasty]
+      related_terms: [abdominal wall defect]
+      months: 24
+      clause_id: "3.3"
+    - name: Joint replacement
+      keywords: [knee replacement, hip replacement, arthroplasty]
+      related_terms: [joint reconstruction]
+      months: 24
+      clause_id: "3.3"
+  sublimits:
+    - name: Cataract
+      keywords: [cataract, phacoemulsification]
+      related_terms: [intraocular lens]
+      max_amount: 40000
+      clause_id: "4.5"
+    - name: Joint replacement
+      keywords: [knee replacement, hip replacement, arthroplasty]
+      max_amount: 200000
+      clause_id: "4.6"
+  exclusions:
+    - name: Cosmetic treatment
+      keywords: [cosmetic, rhinoplasty, liposuction, abdominoplasty]
+      related_terms: [aesthetic, reshaping, scar revision, contouring]
+      clause_id: "6.1"
+    - name: Obesity treatment
+      keywords: [bariatric, sleeve gastrectomy, gastric bypass]
+      related_terms: [weight loss, morbid obesity]
+      clause_id: "6.2"
+  non_payable_categories: [consumables]
+  non_payable_keywords: [gloves, mask, registration, attendant, toiletries]
+  non_payable_clause: "6.3"
+  deductible: 0
+  deductible_clause: "5.1"
+  copay_percent: 10
+  copay_min_age: 61
+  copay_clause: "5.3"
+  required_documents: [claim_form, discharge_summary, invoice]
+  required_documents_clause: "7.4"
